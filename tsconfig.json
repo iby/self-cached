@@ -1,0 +1,15 @@
+{
+  "extends": "@tsconfig/node20/tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "NodeNext",
+    "sourceMap": true,
+    "strict": true,
+    "rootDir": "source",
+    "sourceRoot": "source",
+    "typeRoots": ["node_modules/@types"],
+    "tsBuildInfoFile": "product/.tsbuildinfo",
+    "outDir": "product/js"
+  },
+  "include": ["source/**/*.ts"],
+  "exclude": ["node_modules"]
+}

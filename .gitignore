@@ -1,0 +1,20 @@
+# Keep .gitkeep files
+!.gitkeep
+
+# Project
+/product/*
+!/product/dist
+
+# Dependencies
+/node_modules
+
+# JetBrains
+/.idea/*.iml
+/.idea/modules.xml
+/.idea/tasks.xml
+/.idea/vcs.xml
+/.idea/workspace.xml
+/.idea/dataSources
+/.idea/dataSources.ids
+/.idea/dataSources.local.xml
+/.idea/dictionaries

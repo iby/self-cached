@@ -1,0 +1,24 @@
+name: Self-cached – Local Runner Cache
+description: Store caches locally (on guest or host) on self-hosted runners.
+inputs:
+  path:
+    description: A list of files and directories to cache.
+    required: true
+  key:
+    description: An explicit key for storing and restoring the cache.
+    required: true
+  dir:
+    description: A directory path for storing (to) and restoring (from) the cache. Defaults to $SELF_CACHED_DIR or `~/.self-cached` if not set.
+    required: false
+outputs:
+  cache-hit:
+    description: Specifies whether the cache was restored or not.
+runs:
+  using: node20
+  main: product/dist/Restore.js
+  post: product/dist/Store.js
+  post-if: success()
+branding:
+  icon: hard-drive
+  color: purple
+

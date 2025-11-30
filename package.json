@@ -1,0 +1,29 @@
+{
+  "scripts": {
+    "build": "npm run build:ncc && npm run build:dist",
+    "build:ncc": "npx ncc build source/Restore.ts --out product/ncc/restore && npx ncc build source/Store.ts --out product/ncc/store",
+    "build:dist": "cp product/ncc/restore/index.js product/dist/Restore.js && cp product/ncc/store/index.js product/dist/Store.js",
+    "test": "vitest",
+    "lint": "eslint source",
+    "typecheck": "tsc --build --force --noEmit # Build + force ensures that it's not cached and always runs…"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/io": "^2.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@faker-js/faker": "^10.1.0",
+    "@tsconfig/node20": "^20.1.8",
+    "@types/node": "^20.19.25",
+    "eslint": "^9.39.1",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-n": "^17.23.1",
+    "glob": "^13.0.0",
+    "globals": "^16.5.0",
+    "@vercel/ncc": "^0.38.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "vitest": "^4.0.14"
+  }
+}
