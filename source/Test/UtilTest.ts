@@ -13,16 +13,32 @@ beforeEach(() => {
 });
 
 describe('getDirInput', () => {
-  it('can return input value when $SELF_CACHED_DIR is not set', () => {
-    vi.stubEnv('SELF_CACHED_DIR', undefined);
-    expect(getDirInput('foo')).toBe('foo');
-    expect(getDirInput(undefined)).toBe(path.join(os.homedir(), '.self-cached'));
+  it('can return input value when only $SELF_CACHED_DIR is set', () => {
+    vi.stubEnv('SELF_CACHED_DIR', 'foo');
+    vi.stubEnv('RUNNER_TOOL_CACHE', undefined);
+    expect(getDirInput('baz')).toBe('baz');
+    expect(getDirInput(undefined)).toBe('foo');
   });
 
-  it('can return input value when $SELF_CACHED_DIR is set', () => {
-    vi.stubEnv('SELF_CACHED_DIR', 'foo');
-    expect(getDirInput('bar')).toBe('bar');
+  it('can return input value when only $RUNNER_TOOL_CACHE is set', () => {
+    vi.stubEnv('SELF_CACHED_DIR', undefined);
+    vi.stubEnv('RUNNER_TOOL_CACHE', 'foo');
+    expect(getDirInput('baz')).toBe('baz');
     expect(getDirInput(undefined)).toBe('foo');
+  });
+
+  it('can return input value when both $SELF_CACHED_DIR and $RUNNER_TOOL_CACHE are set', () => {
+    vi.stubEnv('SELF_CACHED_DIR', 'foo');
+    vi.stubEnv('RUNNER_TOOL_CACHE', 'bar');
+    expect(getDirInput('baz')).toBe('baz');
+    expect(getDirInput(undefined)).toBe('foo');
+  });
+
+  it("can't return input value when neither $SELF_CACHED_DIR or $RUNNER_TOOL_CACHE are not set", () => {
+    vi.stubEnv('SELF_CACHED_DIR', undefined);
+    vi.stubEnv('RUNNER_TOOL_CACHE', undefined);
+    expect(getDirInput('baz')).toBe('baz');
+    expect(getDirInput(undefined)).toBe(undefined);
   });
 });
 

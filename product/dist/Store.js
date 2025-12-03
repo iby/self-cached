@@ -25776,7 +25776,7 @@ function getDirInput(value) {
         return value;
     if (process.env.SELF_CACHED_DIR)
         return process.env.SELF_CACHED_DIR;
-    return node_path_1.default.join(node_os_1.default.homedir(), '.self-cached');
+    return process.env.RUNNER_TOOL_CACHE;
 }
 async function getLocalPath(inputPath) {
     const expandedPath = inputPath.startsWith('~') ? node_path_1.default.join(node_os_1.default.homedir(), inputPath.slice(1)) : inputPath;

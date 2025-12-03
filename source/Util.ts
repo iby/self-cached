@@ -23,7 +23,7 @@ export enum State {
 export function getDirInput(value: string | undefined): string {
   if (value) return value;
   if (process.env.SELF_CACHED_DIR) return process.env.SELF_CACHED_DIR;
-  return path.join(os.homedir(), '.self-cached');
+  return process.env.RUNNER_TOOL_CACHE!;
 }
 
 export async function getLocalPath(inputPath: string): Promise<{ path: string; name: string; exists: boolean }> {

@@ -8,7 +8,7 @@ inputs:
     description: An explicit key for storing and restoring the cache.
     required: true
   dir:
-    description: A directory path for storing (to) and restoring (from) the cache. Defaults to $SELF_CACHED_DIR or `~/.self-cached` if not set.
+    description: A directory path for storing (to) and restoring (from) the cache. Defaults to $SELF_CACHED_DIR or $RUNNER_TOOL_CACHE if not set.
     required: false
 outputs:
   cache-hit:
