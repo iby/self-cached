@@ -5,7 +5,7 @@ Local file caching for self-hosted GitHub Actions runners. Made specifically for
 - [x] Relative, absolute, and tilde path support. 
 - [x] Multiple path caching support – cache several related paths in one step.
 - [x] Default cache location via `SELF_CACHED_DIR` environment variable.
-- [ ] Configurable cache compression for fine-tuning the performance.
+- [x] Configurable cache compression for fine-tuning the performance.
 - [ ] Glob support – not sure how it would work, but sounds useful…
 
 ## 💡 Usage

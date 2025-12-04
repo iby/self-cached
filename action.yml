@@ -10,6 +10,9 @@ inputs:
   dir:
     description: A directory path for storing (to) and restoring (from) the cache. Defaults to $SELF_CACHED_DIR or $RUNNER_TOOL_CACHE if not set.
     required: false
+  compress:
+    description: Specifies whether to compress cache using tar. Defaults to $SELF_CACHED_COMPRESS or true if not set.
+    required: false
 outputs:
   cache-hit:
     description: Specifies whether the cache was restored or not.

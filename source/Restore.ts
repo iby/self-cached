@@ -1,11 +1,12 @@
 import * as core from '@actions/core';
-import { getDirInput, Input, Output, restore, State } from './Util';
+import { getCompressInput, getDirInput, Input, Output, restore, State } from './Util';
 
 (async (): Promise<void> => {
   try {
     const paths = core.getInput(Input.Path, { required: true }).split(/\r?\n/).map(p => p.trim()).filter(p => p.length > 0);
     const key = core.getInput(Input.Key, { required: true });
     const dir = getDirInput(core.getInput(Input.Dir, { required: false }));
+    const compress = getCompressInput(core.getInput(Input.Compress, { required: false }));
 
     if (!paths.length || !key || !dir) {
       core.info('Missing inputs, skipping cache restore.');
@@ -16,8 +17,9 @@ import { getDirInput, Input, Output, restore, State } from './Util';
     core.saveState(State.CacheKey, key);
     core.saveState(State.CacheDir, dir);
     core.saveState(State.CachePaths, JSON.stringify(paths));
+    core.saveState(State.CacheCompress, compress.toString());
 
-    const isRestored = await restore(paths, key, dir);
+    const isRestored = await restore(paths, key, dir, compress);
     core.setOutput(Output.CacheHit, isRestored.toString());
 
     if (isRestored) {

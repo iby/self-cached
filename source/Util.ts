@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -8,6 +9,7 @@ export enum Input {
   Path = 'path',
   Key = 'key',
   Dir = 'dir',
+  Compress = 'compress',
 }
 
 export enum Output {
@@ -18,12 +20,19 @@ export enum State {
   CacheKey = 'CACHE_KEY',
   CacheDir = 'CACHE_DIR',
   CachePaths = 'CACHE_PATHS',
+  CacheCompress = 'CACHE_COMPRESS',
 }
 
-export function getDirInput(value: string | undefined): string {
+export function getDirInput(value: string | undefined): string | undefined {
   if (value) return value;
-  if (process.env.SELF_CACHED_DIR) return process.env.SELF_CACHED_DIR;
-  return process.env.RUNNER_TOOL_CACHE!;
+  else if (process.env.SELF_CACHED_DIR) return process.env.SELF_CACHED_DIR;
+  else return process.env.RUNNER_TOOL_CACHE;
+}
+
+export function getCompressInput(value: string | undefined): boolean {
+  if (value) return value == 'true';
+  else if (process.env.SELF_CACHED_COMPRESS) return process.env.SELF_CACHED_COMPRESS == 'true';
+  else return true;
 }
 
 export async function getLocalPath(inputPath: string): Promise<{ path: string; name: string; exists: boolean }> {
@@ -44,7 +53,7 @@ export async function getLocalPath(inputPath: string): Promise<{ path: string; n
 /**
  * Restore cache entries for the given paths.
  */
-export async function restore(inputPaths: string[], key: string, cacheDirPath: string): Promise<boolean> {
+export async function restore(inputPaths: string[], key: string, cacheDirPath: string, compression: boolean): Promise<boolean> {
   const cacheBasePath = path.join(cacheDirPath, key);
 
   if (await fs.access(cacheBasePath).then(() => true).catch(() => false)) {
@@ -56,7 +65,7 @@ export async function restore(inputPaths: string[], key: string, cacheDirPath: s
 
   for (const inputPath of inputPaths) {
     const processedPath = await getLocalPath(inputPath);
-    const cachePath = path.join(cacheBasePath, processedPath.name);
+    const cachePath = path.join(cacheBasePath, compression ? `${processedPath.name}.tar` : processedPath.name);
     if (!(await fs.access(cachePath).then(() => true).catch(() => false))) {
       core.debug(`Path "${inputPath}" not found in caches: skipping restore for this path…`);
       continue;
@@ -65,7 +74,11 @@ export async function restore(inputPaths: string[], key: string, cacheDirPath: s
     await fs.mkdir(path.dirname(processedPath.path), { recursive: true }); // Ensure destination parent exists.
     // Remove the destination to ensure clean restore (also handles edge cases, like file vs. dir changes).
     await fs.rm(processedPath.path, { recursive: true, force: true }).catch();
-    await fs.cp(cachePath, processedPath.path, { recursive: true, force: true });
+    if (compression) {
+      execFileSync('tar', ['-xf', cachePath, '-C', path.dirname(processedPath.path)]);
+    } else {
+      await fs.cp(cachePath, processedPath.path, { recursive: true });
+    }
   }
 
   return true;
@@ -74,7 +87,7 @@ export async function restore(inputPaths: string[], key: string, cacheDirPath: s
 /**
  * Store cache entries for the given paths.
  */
-export async function store(paths: string[], key: string, cacheDirPath: string): Promise<void> {
+export async function store(paths: string[], key: string, cacheDirPath: string, compression: boolean): Promise<void> {
   const cacheBasePath = path.join(cacheDirPath, key);
 
   if (await fs.access(cacheBasePath).then(() => true).catch(() => false)) {
@@ -87,13 +100,18 @@ export async function store(paths: string[], key: string, cacheDirPath: string):
 
   for (const inputPath of paths) {
     const processedPath = await getLocalPath(inputPath);
-    const cachePath = path.join(cacheBasePath, processedPath.name);
+    const cachePath = path.join(cacheBasePath, `${processedPath.name}${compression ? '.tar' : ''}`);
     if (!processedPath.exists) {
       core.warning(`Path ${inputPath} does not exist or is not readable, skipping…`);
       continue;
     }
-    core.info(`Copying ${inputPath} to: ${cachePath}`);
-    await fs.cp(processedPath.path, cachePath, { recursive: true, force: true });
+    if (compression) {
+      core.info(`Archiving ${inputPath} to: ${cachePath}`);
+      execFileSync('tar', ['-cf', cachePath, '-C', path.dirname(processedPath.path), path.basename(processedPath.path)]);
+    } else {
+      core.info(`Copying ${inputPath} to: ${cachePath}`);
+      await fs.cp(processedPath.path, cachePath, { recursive: true });
+    }
   }
   core.info(`Cache successfully stored to: ${cacheBasePath}`);
 }

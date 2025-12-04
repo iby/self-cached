@@ -25689,11 +25689,12 @@ const Util_1 = __nccwpck_require__(277);
         const paths = JSON.parse(core.getState(Util_1.State.CachePaths) || '[]');
         const key = core.getState(Util_1.State.CacheKey);
         const dir = core.getState(Util_1.State.CacheDir);
+        const compress = core.getState(Util_1.State.CacheCompress) === 'true';
         if (!paths.length || !key || !dir) {
             core.info('Missing state inputs, skipping cache store.');
             return;
         }
-        await (0, Util_1.store)(paths, key, dir);
+        await (0, Util_1.store)(paths, key, dir, compress);
     }
     catch (error) {
         core.setFailed(error instanceof Error ? error.message : `Unknown error occurred during restore: ${error}`);
@@ -25747,10 +25748,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.State = exports.Output = exports.Input = void 0;
 exports.getDirInput = getDirInput;
+exports.getCompressInput = getCompressInput;
 exports.getLocalPath = getLocalPath;
 exports.restore = restore;
 exports.store = store;
 const core = __importStar(__nccwpck_require__(6966));
+const node_child_process_1 = __nccwpck_require__(1421);
 const node_crypto_1 = __importDefault(__nccwpck_require__(7598));
 const promises_1 = __importDefault(__nccwpck_require__(1455));
 const node_os_1 = __importDefault(__nccwpck_require__(8161));
@@ -25760,6 +25763,7 @@ var Input;
     Input["Path"] = "path";
     Input["Key"] = "key";
     Input["Dir"] = "dir";
+    Input["Compress"] = "compress";
 })(Input || (exports.Input = Input = {}));
 var Output;
 (function (Output) {
@@ -25770,13 +25774,23 @@ var State;
     State["CacheKey"] = "CACHE_KEY";
     State["CacheDir"] = "CACHE_DIR";
     State["CachePaths"] = "CACHE_PATHS";
+    State["CacheCompress"] = "CACHE_COMPRESS";
 })(State || (exports.State = State = {}));
 function getDirInput(value) {
     if (value)
         return value;
-    if (process.env.SELF_CACHED_DIR)
+    else if (process.env.SELF_CACHED_DIR)
         return process.env.SELF_CACHED_DIR;
-    return process.env.RUNNER_TOOL_CACHE;
+    else
+        return process.env.RUNNER_TOOL_CACHE;
+}
+function getCompressInput(value) {
+    if (value)
+        return value == 'true';
+    else if (process.env.SELF_CACHED_COMPRESS)
+        return process.env.SELF_CACHED_COMPRESS == 'true';
+    else
+        return true;
 }
 async function getLocalPath(inputPath) {
     const expandedPath = inputPath.startsWith('~') ? node_path_1.default.join(node_os_1.default.homedir(), inputPath.slice(1)) : inputPath;
@@ -25797,7 +25811,7 @@ async function getLocalPath(inputPath) {
 /**
  * Restore cache entries for the given paths.
  */
-async function restore(inputPaths, key, cacheDirPath) {
+async function restore(inputPaths, key, cacheDirPath, compression) {
     const cacheBasePath = node_path_1.default.join(cacheDirPath, key);
     if (await promises_1.default.access(cacheBasePath).then(() => true).catch(() => false)) {
         core.info(`Cache found at ${cacheBasePath}, restoring…`);
@@ -25808,7 +25822,7 @@ async function restore(inputPaths, key, cacheDirPath) {
     }
     for (const inputPath of inputPaths) {
         const processedPath = await getLocalPath(inputPath);
-        const cachePath = node_path_1.default.join(cacheBasePath, processedPath.name);
+        const cachePath = node_path_1.default.join(cacheBasePath, compression ? `${processedPath.name}.tar` : processedPath.name);
         if (!(await promises_1.default.access(cachePath).then(() => true).catch(() => false))) {
             core.debug(`Path "${inputPath}" not found in caches: skipping restore for this path…`);
             continue;
@@ -25817,14 +25831,19 @@ async function restore(inputPaths, key, cacheDirPath) {
         await promises_1.default.mkdir(node_path_1.default.dirname(processedPath.path), { recursive: true }); // Ensure destination parent exists.
         // Remove the destination to ensure clean restore (also handles edge cases, like file vs. dir changes).
         await promises_1.default.rm(processedPath.path, { recursive: true, force: true }).catch();
-        await promises_1.default.cp(cachePath, processedPath.path, { recursive: true, force: true });
+        if (compression) {
+            (0, node_child_process_1.execFileSync)('tar', ['-xf', cachePath, '-C', node_path_1.default.dirname(processedPath.path)]);
+        }
+        else {
+            await promises_1.default.cp(cachePath, processedPath.path, { recursive: true });
+        }
     }
     return true;
 }
 /**
  * Store cache entries for the given paths.
  */
-async function store(paths, key, cacheDirPath) {
+async function store(paths, key, cacheDirPath, compression) {
     const cacheBasePath = node_path_1.default.join(cacheDirPath, key);
     if (await promises_1.default.access(cacheBasePath).then(() => true).catch(() => false)) {
         core.info(`Cache already exists at ${cacheBasePath}, skipping save.`);
@@ -25834,13 +25853,19 @@ async function store(paths, key, cacheDirPath) {
     await promises_1.default.mkdir(cacheBasePath, { recursive: true });
     for (const inputPath of paths) {
         const processedPath = await getLocalPath(inputPath);
-        const cachePath = node_path_1.default.join(cacheBasePath, processedPath.name);
+        const cachePath = node_path_1.default.join(cacheBasePath, `${processedPath.name}${compression ? '.tar' : ''}`);
         if (!processedPath.exists) {
             core.warning(`Path ${inputPath} does not exist or is not readable, skipping…`);
             continue;
         }
-        core.info(`Copying ${inputPath} to: ${cachePath}`);
-        await promises_1.default.cp(processedPath.path, cachePath, { recursive: true, force: true });
+        if (compression) {
+            core.info(`Archiving ${inputPath} to: ${cachePath}`);
+            (0, node_child_process_1.execFileSync)('tar', ['-cf', cachePath, '-C', node_path_1.default.dirname(processedPath.path), node_path_1.default.basename(processedPath.path)]);
+        }
+        else {
+            core.info(`Copying ${inputPath} to: ${cachePath}`);
+            await promises_1.default.cp(processedPath.path, cachePath, { recursive: true });
+        }
     }
     core.info(`Cache successfully stored to: ${cacheBasePath}`);
 }
@@ -25949,6 +25974,14 @@ module.exports = require("https");
 
 "use strict";
 module.exports = require("net");
+
+/***/ }),
+
+/***/ 1421:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:child_process");
 
 /***/ }),
 
