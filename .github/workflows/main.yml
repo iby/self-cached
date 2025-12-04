@@ -1,13 +1,21 @@
-name: Main
+name: CI & CD
 
 on:
-  push: { branches: [ main ] }
+  push:
+    branches: [ main ]
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+' ] # ✊ SemVer tag triggers a CD job.
   pull_request:
   workflow_dispatch:
 
+# https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  main:
-    name: Test
+
+  ci:
+    name: Lint & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -40,10 +48,40 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      - name: Verify build is up to date
+      - name: Verify build
         run: |
           if [ -n "$(git status --porcelain product/dist)" ]; then
             echo "Error: product/dist contains uncommitted changes after the build…"
             git diff product/dist
             exit 1
           fi
+
+  cd:
+    name: Release
+    needs: ci
+    if: needs.ci.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')))
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Git
+        uses: actions/checkout@v5
+
+      - name: Create GitHub release changelog
+        id: changelog
+        uses: metcalfc/changelog-generator@v4.6.2
+        with:
+          myToken: ${{ github.token }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.changelog }}
+
+      - name: Update major version
+        run: |
+          MAJOR_VERSION=$(echo "${{ github.ref_name }}" | grep -oE 'v[0-9]+')
+          git tag -f $MAJOR_VERSION
+          git push origin $MAJOR_VERSION --force
