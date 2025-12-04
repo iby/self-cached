@@ -46,7 +46,7 @@ describe('integration', () => {
 
     // Verify that all files exist in the cache.
     for (const inputPath of Object.values(inputPaths)) {
-      await fs.lstat(path.join(cacheDirPath, key, `${(await getLocalPath(inputPath)).name}${compress ? '.tar' : ''}`));
+      await fs.lstat(path.join(cacheDirPath, key, `${(await getLocalPath(inputPath)).cacheName}${compress ? '.tar' : ''}`));
     }
 
     // Restore and move the project directory to a different location.

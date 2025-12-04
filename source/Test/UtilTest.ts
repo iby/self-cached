@@ -73,33 +73,31 @@ describe('getCompressInput', () => {
 
 describe('getLocalPath', () => {
   it('can handle relative paths', async () => {
-    vi.mocked(fs.lstat).mockResolvedValue({ exists: true } as any);
-    expect(await getLocalPath('foo')).toEqual({ path: path.resolve(process.cwd(), 'foo'), name: 'foo', exists: true });
-    expect(await getLocalPath('./foo')).toEqual({ path: path.resolve(process.cwd(), 'foo/'), name: '._foo', exists: true });
-    expect(await getLocalPath('foo/.')).toEqual({ path: path.resolve(process.cwd(), 'foo/'), name: 'foo_.', exists: true });
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+    expect(await getLocalPath('foo')).toEqual({ input: 'foo', resolved: path.resolve(process.cwd(), 'foo'), cacheName: 'foo', isAccessible: true });
+    expect(await getLocalPath('./foo')).toEqual({ input: './foo', resolved: path.resolve(process.cwd(), 'foo/'), cacheName: '._foo', isAccessible: true });
+    expect(await getLocalPath('foo/.')).toEqual({ input: 'foo/.', resolved: path.resolve(process.cwd(), 'foo/'), cacheName: 'foo_.', isAccessible: true });
   });
 
   it('can handle absolute paths', async () => {
-    vi.mocked(fs.lstat).mockResolvedValue({ exists: true } as any);
-    expect(await getLocalPath('/foo')).toEqual({ path: '/foo', name: '_foo', exists: true });
-    expect(await getLocalPath('/foo/')).toEqual({ path: '/foo', name: '_foo_', exists: true });
-    expect(await getLocalPath('/foo/.')).toEqual({ path: '/foo', name: '_foo_.', exists: true });
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+    expect(await getLocalPath('/foo')).toEqual({ input: '/foo', resolved: '/foo', cacheName: '_foo', isAccessible: true });
+    expect(await getLocalPath('/foo/')).toEqual({ input: '/foo/', resolved: '/foo', cacheName: '_foo_', isAccessible: true });
+    expect(await getLocalPath('/foo/.')).toEqual({ input: '/foo/.', resolved: '/foo', cacheName: '_foo_.', isAccessible: true });
   });
 
   it('can handle ~tilde paths', async () => {
-    vi.mocked(fs.lstat).mockResolvedValue({ exists: true } as any);
-    expect(await getLocalPath('~/foo')).toEqual({ path: path.resolve(os.homedir(), 'foo'), name: '__foo', exists: true });
-    expect(await getLocalPath('~/foo/')).toEqual({ path: path.resolve(os.homedir(), 'foo'), name: '__foo_', exists: true });
-    expect(await getLocalPath('~/foo/.')).toEqual({ path: path.resolve(os.homedir(), 'foo'), name: '__foo_.', exists: true });
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+    expect(await getLocalPath('~/foo')).toEqual({ input: '~/foo', resolved: path.resolve(os.homedir(), 'foo'), cacheName: '__foo', isAccessible: true });
+    expect(await getLocalPath('~/foo/')).toEqual({ input: '~/foo/', resolved: path.resolve(os.homedir(), 'foo'), cacheName: '__foo_', isAccessible: true });
+    expect(await getLocalPath('~/foo/.')).toEqual({ input: '~/foo/.', resolved: path.resolve(os.homedir(), 'foo'), cacheName: '__foo_.', isAccessible: true });
   });
 
-  it('can handle non-existent paths', async () => {
-    vi.mocked(fs.lstat).mockRejectedValue(new Error('ENOENT'));
-    expect(await getLocalPath('/foo')).toEqual({
-      path: '/foo',
-      name: '_foo',
-      exists: false,
-    });
+  it('can handle non-existent and non-accessible paths', async () => {
+    vi.mocked(fs.access).mockRejectedValue(new Error('ENOENT'));
+    expect(await getLocalPath('/foo')).toEqual({ input: '/foo', resolved: '/foo', cacheName: '_foo', isAccessible: false });
+    vi.mocked(fs.access).mockRejectedValue(new Error('EACCESS'));
+    expect(await getLocalPath('/foo')).toEqual({ input: '/foo', resolved: '/foo', cacheName: '_foo', isAccessible: false });
   });
 });
 
@@ -107,9 +105,7 @@ describe('restore', () => {
   it('can restore uncompressed cache if it exists', async () => {
     vi.mocked(fs.rm).mockResolvedValue(undefined);
     vi.mocked(fs.access).mockResolvedValue(undefined);
-    vi.mocked(fs.lstat).mockResolvedValue({ isDirectory: () => false } as any);
-    const result = await restore(['foo', '~/bar', '/baz'], 'abc', '/tmp/cache', false);
-    expect(result).toBe(true);
+    expect(await restore(['foo', '~/bar', '/baz'], 'abc', '/tmp/cache', false)).toBe(true);
     expect(fs.rm).toBeCalledTimes(3);
     expect(fs.rm).toBeCalledWith(path.join(process.cwd(), 'foo'), { recursive: true, force: true });
     expect(fs.rm).toBeCalledWith(path.join(os.homedir(), 'bar'), { recursive: true, force: true });
@@ -123,9 +119,7 @@ describe('restore', () => {
   it('can restore compressed cache if it exists', async () => {
     vi.mocked(fs.rm).mockResolvedValue(undefined);
     vi.mocked(fs.access).mockResolvedValue(undefined);
-    vi.mocked(fs.lstat).mockResolvedValue({ isDirectory: () => false } as any);
-    const result = await restore(['foo', '~/bar', '/baz'], 'abc', '/tmp/cache', true);
-    expect(result).toBe(true);
+    expect(await restore(['foo', '~/bar', '/baz'], 'abc', '/tmp/cache', true)).toBe(true);
     expect(fs.rm).toBeCalledTimes(3);
     expect(fs.cp).not.toBeCalled();
     expect(execFileSync).toBeCalledTimes(3);
@@ -135,19 +129,26 @@ describe('restore', () => {
   });
 
   it("can't restore cache if it doesn't exist", async () => {
-    vi.mocked(fs.access).mockRejectedValueOnce(new Error('ENOENT'));
-    const result = await restore(['foo'], 'abc', '/tmp/cache', faker.datatype.boolean());
-    expect(result).toBe(false);
+    vi.mocked(fs.access).mockImplementation(p => (p as string).startsWith('/tmp/cache') ? Promise.reject(new Error('ENOENT')) : Promise.resolve(undefined));
+    expect(await restore(['foo'], 'abc', '/tmp/cache', faker.datatype.boolean())).toBe(false);
     expect(fs.rm).not.toBeCalled();
     expect(fs.cp).not.toBeCalled();
   });
 });
 
 describe('store', () => {
+  it('can validate input paths: conflicts', async () => {
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+    expect(await store(['foo', 'foo'], 'abc', '/tmp/cache', false)).toBe(false);
+    expect(await store(['../foo', './foo'], 'abc', '/tmp/cache', false)).toBe(false);
+    expect(await store(['../foo', '~/foo'], 'abc', '/tmp/cache', false)).toBe(false);
+    expect(execFileSync).not.toBeCalled();
+    expect(fs.cp).not.toBeCalled();
+  });
+
   it("can store uncompressed cache if it doesn't exist", async () => {
-    vi.mocked(fs.access).mockRejectedValue(new Error('ENOENT'));
-    vi.mocked(fs.lstat).mockResolvedValue({ isDirectory: () => false } as any);
-    await store(['foo', '~/bar', '/baz'], 'abc', '/tmp/cache', false);
+    vi.mocked(fs.access).mockImplementation(p => (p as string).startsWith('/tmp/cache') ? Promise.reject(new Error('ENOENT')) : Promise.resolve(undefined));
+    expect(await store(['foo', '~/bar', '/baz'], 'abc', '/tmp/cache', false)).toBe(true);
     expect(fs.mkdir).toBeCalledTimes(1);
     expect(fs.mkdir).toBeCalledWith('/tmp/cache/abc', { recursive: true });
     expect(fs.cp).toBeCalledTimes(3);
@@ -157,9 +158,8 @@ describe('store', () => {
   });
 
   it("can store compressed cache if it doesn't exist", async () => {
-    vi.mocked(fs.access).mockRejectedValue(new Error('ENOENT'));
-    vi.mocked(fs.lstat).mockResolvedValue({ isDirectory: () => false } as any);
-    await store(['foo', '~/bar', '/baz'], 'abc', '/tmp/cache', true);
+    vi.mocked(fs.access).mockImplementation(p => (p as string).startsWith('/tmp/cache') ? Promise.reject(new Error('ENOENT')) : Promise.resolve(undefined));
+    expect(await store(['foo', '~/bar', '/baz'], 'abc', '/tmp/cache', true)).toBe(true);
     expect(fs.mkdir).toBeCalledTimes(1);
     expect(fs.mkdir).toBeCalledWith('/tmp/cache/abc', { recursive: true });
     expect(execFileSync).toBeCalledTimes(3);
